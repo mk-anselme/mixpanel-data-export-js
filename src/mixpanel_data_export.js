@@ -25,7 +25,7 @@ var MixpanelExport = (function() {
   MixpanelExport.prototype.export = function(parameters, callback) {
     if (!this.isNode) throw new Error(this._jsonpUnsupported("export"));
     return this.get("export", parameters, callback);
-  }
+  };
 
   MixpanelExport.prototype.engage = function(parameters, callback) {
     if (!this.isNode) throw new Error(this._jsonpUnsupported("engage"));
@@ -136,6 +136,59 @@ var MixpanelExport = (function() {
       callback(self._parseResponse(method, parameters, this.responseText));
     };
     request.send();
+  };
+
+  var Export_stream_object = function(method, parameters, mixpanel){
+    this.method = method;
+    this.parameters = parameters;
+    this.mixpanel = mixpanel;
+    this.readable_stream = (require('request'))(mixpanel._buildRequestURL(method, parameters));
+  };
+  var EventEmitter = require('events').EventEmitter;
+  var util = require('util');
+  util.inherits(Export_stream_object, EventEmitter);
+
+  Export_stream_object.prototype.run = function() {
+    var self = this;
+    var split = require('split');
+    this.readable_stream
+      .pipe(split())
+      .on('data', function(line) {
+        if (line === null || line === '') {
+          // self.emit('end');
+        }
+        else {
+          var data;
+          try {
+            data = JSON.parse(line);
+            self.emit('data', data);
+          }
+          catch(err) {
+            var msg = 'Error: could not parse line: ' + line;
+            console.error(msg);
+            console.error(typeof line);
+            self.emit('error',msg);
+          }
+        }
+      })
+      .on('end', function(line) {
+        self.emit('end');
+      })
+      .on('error', function(err) {
+        self.emit('error',err);
+      });
+  };
+
+  Export_stream_object.prototype.pause = function() {
+    this.readable_stream.pause();
+  };
+
+  Export_stream_object.prototype.resume = function() {
+    this.readable_stream.resume();
+  };
+
+  MixpanelExport.prototype.exportStream = function(parameters) {
+    return new Export_stream_object('export', parameters, this);
   };
 
   MixpanelExport.prototype._jsonpUnsupported = function(methodName) {

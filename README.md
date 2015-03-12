@@ -1,99 +1,88 @@
-Mixpanel Data Export (v 1.6.2)
-==============================
 
-Introduction
-------------
+Mixpanel Data Export with some streaming capabilities for Event Export
+========================================================================
 
-Simply put, this is a JavaScript library that makes [Mixpanel's data export API](https://mixpanel.com/docs/api-documentation/data-export-api#libs-js) easy to use. Simply instantiate the class with your API secret and key and then make calls to api methods and get correctly formatted data back via a promise or callback.
+This is a fork of Michael's [Mixpanel Data Export](https://github.com/michaelcarter/mixpanel-data-export-js). 
 
-Node Installation
-----------------
+WHAT
+-----
+It implements a stream(ish) interface to export events from Mixpanel.
 
-Do
+WHY
+-----
+The mixpanel data exporter was consuming too much memory when pulling large data sets. Streaming allows for pulling some data, process it and releasing it.
+
+HOW TO INSTALL
+---------------
+
+No npm repo. Clone and then ```npm install``` to install the dependencies.
+
+
+HOW TO USE
+---------------
+
+Simple example:
 
 ```
-npm install mixpanel-data-export --save
-```
-
-then
-
-```javascript
-var MixpanelExport = require('mixpanel-data-export');
-```
-
-Browser Installation
---------------------
-
-You'll have to host the library yourself, so:
-
-```html
-<script src="your/path/to/mixpanel_data_export.min.js"></script>
-```
-
-General Usage Instructions
---------------------------
-
-Every method detailed on [mixpanel's data export api page](https://mixpanel.com/docs/api-documentation/data-export-api#libs-js) is available in the library. However, some of the namings have been adjusted to read more semantically, for example, `topEventProperties` , and `eventPropertyValues`.
-
-The full list of methods is as follows:
-
- - `export(parameters)` (node only, see: https://github.com/michaelcarter/mixpanel-data-export-js/issues/3)
- - `engage(parameters)` (node only, see: https://github.com/michaelcarter/mixpanel-data-export-js/issues/6)
- - `annotations(parameters)`
- - `createAnnotation(parameters)`
- - `updateAnnotation(parameters)`
- - `events(parameters)`
- - `topEvents(parameters)`
- - `eventNames(parameters)`
- - `eventProperties(parameters)`
- - `topEventProperties(parameters)`
- - `eventPropertyValues(parameters)`
- - `funnels(parameters)`
- - `listFunnels(parameters)`
- - `segmentation(parameters)`
- - `numericSegmentation(parameters)`
- - `sumSegmentation(parameters)`
- - `averageSegmentation(parameters)`
- - `retention(parameters)`
- - `addiction(parameters)`
-
-An example usage might be:
-
-```javascript
-panel = new MixpanelExport({
-  api_key: "my_api_key",
-  api_secret: "my_api_secret"
+// create a export object
+var mp_export = panel.exportStream({
+    from_date: "2015-03-01",
+    to_date: "2015-03-02"
 });
-
-panel.retention({
-  from_date: "2014-02-28",
-  to_date: "2014-03-10",
-  born_event: "Rendering items"
-}).then(function(data) {
-  console.log(data);
+// listen on data. Each data is a event json object from mixpanel
+mp_export.on('data', function(data) {
+  // do something with it
 });
+// listen for error
+mp_export.on('error', function(err) {
+  // handle error
+});
+// listen for the end of the stream
+mp_export.on('end', function() {
+  // move on to do other stuff
+});
+// start the export
+mp_export.run();
 ```
 
-Callbacks are also supported:
+Example with doing **pause** and **resume** while processing the data as it comes.
 
-```javascript
-panel = new MixpanelExport({
-  api_key: "my_api_key",
-  api_secret: "my_api_secret"
-});
-
-result = panel.retention({
-  from_date: "2014-02-28",
-  to_date: "2014-03-10",
-  born_event: "Rendering items"
-}, function(data) {
-  console.log(data);
-});
 ```
-
-A full list of available API methods is detailed on [mixpanel's data export api page](https://mixpanel.com/docs/api-documentation/data-export-api#libs-js). If you find any that are missing please let me know, or better yet put in a pull request.
-
-Known Issues
-------------
-
- - CSV Formatted JSONP responses cause errors in Browser.
+// create a export object
+var mp_export = panel.exportStream({
+    from_date: "2015-03-01",
+    to_date: "2015-03-02"
+});
+var small_batch_length = 100;
+var process_a_batch = function(small_batch, callback) {
+      // do something with the batch
+      setTimeout(callback, 1000);
+};
+var buffer = [];
+// listen on data. Each data is a event json object from mixpanel
+mp_export.on('data', function(data) {
+  // add data to buffer array
+  buffer.push(data);
+  if (buffer.length > small_batch_length) {
+    // pause downloading of records while we process a batch
+    mp_export.pause();
+    // extract a small batch for the buffer
+    var small_batch = buffer.splice(0,small_batch_length-1);
+    process_a_batch(small_batch, function(){
+      // resume download after small batch has been processed
+      mp_export.resume();
+    });
+  }
+});
+// listen for error
+mp_export.on('error', function(err) {
+  done(err);
+});
+// listen for the end of the stream
+mp_export.on('end', function() {
+  // process the last batch
+  process_a_batch(buffer, done);
+});
+// start the export
+mp_export.run();
+```
