@@ -161,7 +161,11 @@ var MixpanelExport = (function() {
           var data;
           try {
             data = JSON.parse(line);
-            self.emit('data', data);
+            if (data.error) {
+              self.emit('error', data.error);
+            } else {
+              self.emit('data', data);
+            }
           }
           catch(err) {
             var msg = 'Error: could not parse line: ' + line;
